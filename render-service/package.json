@@ -1,13 +1,12 @@
 {
-  "name": "render-service",
+  "name": "vidmasta-render-service",
   "version": "1.0.0",
-  "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "@google-cloud/vision": "^4.3.0",
+    "@google-cloud/text-to-speech": "^5.3.0"
+  }
 }
