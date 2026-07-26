@@ -5,6 +5,7 @@
 // sprites and post images only ever exist for the life of this one request.
 
 const express = require('express');
+const cors = require('cors');
 const vision = require('@google-cloud/vision');
 const textToSpeech = require('@google-cloud/text-to-speech');
 const { execFile } = require('child_process');
@@ -15,8 +16,16 @@ const path = require('path');
 const crypto = require('crypto');
 
 const run = promisify(execFile);
-const visionClient = new vision.ImageAnnotatorClient();
-const ttsClient = new textToSpeech.TextToSpeechClient();
+
+// Cloud Run auto-attaches a service account; Railway doesn't, so we load
+// credentials explicitly from an env var containing the full JSON key.
+// Set GOOGLE_CREDENTIALS_JSON in Railway's dashboard (paste the whole key file's contents).
+const credentials = process.env.GOOGLE_CREDENTIALS_JSON
+  ? JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON)
+  : undefined;
+
+const visionClient = new vision.ImageAnnotatorClient(credentials ? { credentials } : undefined);
+const ttsClient = new textToSpeech.TextToSpeechClient(credentials ? { credentials } : undefined);
 
 const WIDTH = 1080, HEIGHT = 1920, XFADE = 0.4;
 const CAPTION_GREEN = '0x39FF14';
@@ -36,6 +45,7 @@ const EMOTION_KEYWORDS = {
 };
 
 const app = express();
+app.use(cors()); // frontend (GitHub Pages) and backend (Railway) are different origins
 app.use(express.json({ limit: '30mb' }));
 
 app.post('/generate', async (req, res) => {
