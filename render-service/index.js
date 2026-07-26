@@ -48,6 +48,12 @@ const app = express();
 app.use(cors()); // frontend (GitHub Pages) and backend (Railway) are different origins
 app.use(express.json({ limit: '30mb' }));
 
+// Quick way to confirm the service is alive by just visiting the URL in a browser
+app.get('/', (req, res) => res.send('Vidmasta render service is running.'));
+
+// Quick way to confirm the service is alive by just visiting the URL in a browser
+app.get('/', (req, res) => res.send('Vidmasta render service is running.'));
+
 app.post('/generate', async (req, res) => {
   const { title, images, sprites } = req.body;
   if (!images?.length) return res.status(400).send('At least one image is required');
