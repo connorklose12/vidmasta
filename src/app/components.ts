@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { AuthService, PostService, EMOTIONS, Emotion } from './services';
+import { AuthService, VideoService, EMOTIONS, Emotion } from './services';
 
 @Component({
   selector: 'app-login',
@@ -48,25 +48,38 @@ export class LoginComponent {
       <label>Post screenshots (in order)</label>
       <input type="file" accept="image/*" multiple (change)="postFiles = pick($event)" />
 
-      <h3>Emotion sprites (optional, saved to your account)</h3>
+      <h3>Emotion sprites (optional — used for this video only, not saved anywhere)</h3>
       <div *ngFor="let emotion of emotions">
         <span>{{ emotion }}</span>
         <input type="file" accept="image/png" (change)="sprites[emotion] = pick($event)[0]" />
       </div>
 
-      <button (click)="submit()" [disabled]="submitting">{{ submitting ? 'Uploading...' : 'Generate Video' }}</button>
+      <button (click)="submit()" [disabled]="submitting">
+        {{ submitting ? 'Generating... this can take a few minutes' : 'Generate Video' }}
+      </button>
 
       <p class="error" *ngIf="error">{{ error }}</p>
-      <p class="success" *ngIf="jobId">Queued! Job ID: {{ jobId }}</p>
+
+      <div *ngIf="videoBase64" class="result">
+        <video [src]="musicOn ? videoSrc : videoNoMusicSrc" controls width="280"></video>
+        <br />
+        <button (click)="musicOn = !musicOn">{{ musicOn ? 'Turn Music Off' : 'Turn Music On' }}</button>
+        <a [href]="musicOn ? videoSrc : videoNoMusicSrc" download="video.mp4">Download</a>
+      </div>
     </div>
   `,
 })
 export class UploadComponent {
   emotions = EMOTIONS;
   title = ''; postFiles: File[] = []; sprites: Partial<Record<Emotion, File>> = {};
-  submitting = false; jobId: string | null = null; error = '';
+  submitting = false; error = '';
 
-  constructor(private posts: PostService) {}
+  videoBase64: string | null = null;
+  videoNoMusicBase64: string | null = null;
+  videoSrc = ''; videoNoMusicSrc = '';
+  musicOn = true;
+
+  constructor(private videos: VideoService) {}
 
   pick(event: Event): File[] {
     const input = event.target as HTMLInputElement;
@@ -78,7 +91,11 @@ export class UploadComponent {
     if (!this.postFiles.length) { this.error = 'Add at least one screenshot.'; return; }
     this.submitting = true;
     try {
-      this.jobId = await this.posts.createJob(this.postFiles, this.title || 'Untitled', this.sprites);
+      const result = await this.videos.generateVideo(this.postFiles, this.title || 'Untitled', this.sprites);
+      this.videoBase64 = result.videoBase64;
+      this.videoNoMusicBase64 = result.videoNoMusicBase64;
+      this.videoSrc = `data:video/mp4;base64,${this.videoBase64}`;
+      this.videoNoMusicSrc = `data:video/mp4;base64,${this.videoNoMusicBase64}`;
     } catch (e: any) { this.error = e.message; }
     finally { this.submitting = false; }
   }
