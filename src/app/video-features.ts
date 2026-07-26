@@ -1,7 +1,6 @@
 // ============================================================
-// video-feature.ts — everything the frontend needs: models, auth
-// service, and the 3 pages (login / create / export). Add the
-// route + provider snippets from below to wire it in.
+// video-features.ts — everything the frontend needs: models, auth
+// service, and the 3 pages (login / create / export).
 // ============================================================
 import { Component, OnInit, Injectable } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -191,7 +190,7 @@ export class CreateComponent {
       <h3>Connect Accounts</h3>
       <div class="platform">
         <span>YouTube Shorts</span>
-        <button (click)="connectYoutube()">{{ conn.youtube?.connected ? 'Reconnect' : 'Connect' }}</button>
+        <button (click)="connectYoutube()">{{ conn['youtube']?.connected ? 'Reconnect' : 'Connect' }}</button>
         <span class="msg">{{ statusText('youtube') }}</span>
       </div>
       <div class="platform">
@@ -209,9 +208,9 @@ export class CreateComponent {
 
       <h3>Publish</h3>
       <div class="publish-row">
-        <button [disabled]="!conn.youtube?.connected" (click)="publish('youtube')">Publish to YouTube Shorts</button>
-        <button [disabled]="!conn.tiktok?.connected" (click)="publish('tiktok')">Publish to TikTok</button>
-        <button [disabled]="!conn.instagram?.connected" (click)="publish('instagram')">Publish to Instagram Reels</button>
+        <button [disabled]="!conn['youtube']?.connected" (click)="publish('youtube')">Publish to YouTube Shorts</button>
+        <button [disabled]="!conn['tiktok']?.connected" (click)="publish('tiktok')">Publish to TikTok</button>
+        <button [disabled]="!conn['instagram']?.connected" (click)="publish('instagram')">Publish to Instagram Reels</button>
       </div>
       <p class="error" *ngIf="publishMsg">{{ publishMsg }}</p>
     </div>`,
