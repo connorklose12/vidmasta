@@ -5,7 +5,7 @@ export const EMOTIONS = ['happy', 'excited', 'sad', 'mad', 'confused', 'grossed_
 export type Emotion = (typeof EMOTIONS)[number];
 
 // Point this at your deployed Cloud Run render service.
-export const RENDER_SERVICE_URL = 'https://YOUR-RENDER-SERVICE-URL.run.app';
+export const RENDER_SERVICE_URL = 'https://vidmeusq-production.up.railway.app';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
