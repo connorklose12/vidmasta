@@ -188,7 +188,7 @@ async function renderClip({ bgVideo, bgStart, duration, imgPath, spritePath, aud
   const f = [];
   f.push(`[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}[bg]`);
   f.push(`[1:v]scale=${WIDTH - 160}:-1[postimg]`);
-  f.push(`[postimg]crop=iw:'ih*min(1\\,t/${duration})':0:0[reveal]`);
+  f.push(`[postimg]crop=w=iw:h='ih*min(1\\,t/${duration})':x=0:y=0:eval=frame[reveal]`);
   f.push(`[bg][reveal]overlay=80:200[withpost]`);
   let last = 'withpost';
   if (spritePath) {
