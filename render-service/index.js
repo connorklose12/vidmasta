@@ -215,7 +215,7 @@ async function renderClip({ bgVideo, bgStart, duration, imgPath, spritePath, aud
     f.push(`[2:a]anull[aout]`);
   }
 
-  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${last}]`, '-map', '[aout]', '-t', String(duration), '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
+  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${last}]`, '-map', '[aout]', '-t', String(duration), '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
 }
 
 async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSfx, outPath) {
@@ -248,7 +248,10 @@ async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSf
   // must be mapped as a raw input stream (no brackets) rather than a filter label.
   const videoMap = v === '0:v' ? '0:v' : `[${v}]`;
 
-  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', videoMap, '-map', '[aoutfinal]', '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
+  // Single clip = video was never touched by a filter, so just copy it instead of re-encoding
+  const videoCodecArgs = v === '0:v' ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2'];
+
+  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', videoMap, '-map', '[aoutfinal]', ...videoCodecArgs, '-c:a', 'aac', '-y', outPath]);
 }
 
 async function mixInMusic(videoPath, musicPath, outPath) {
