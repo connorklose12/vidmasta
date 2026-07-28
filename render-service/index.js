@@ -210,7 +210,7 @@ async function renderClip({ bgVideo, bgStart, duration, imgPath, spritePath, aud
     f.push(`[2:a]anull[aout]`);
   }
 
-  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${last}]`, '-map', '[aout]', '-t', String(duration), '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', '-y', outPath]);
+  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${last}]`, '-map', '[aout]', '-t', String(duration), '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
 }
 
 async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSfx, outPath) {
@@ -239,7 +239,7 @@ async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSf
   const mixIn = ['[hook]', ...whooshLabels, `[${a}]`].join('');
   f.push(`${mixIn}amix=inputs=${whooshLabels.length + 2}:duration=first[aoutfinal]`);
 
-  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${v}]`, '-map', '[aoutfinal]', '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', '-y', outPath]);
+  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${v}]`, '-map', '[aoutfinal]', '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
 }
 
 async function mixInMusic(videoPath, musicPath, outPath) {
