@@ -239,7 +239,11 @@ async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSf
   const mixIn = ['[hook]', ...whooshLabels, `[${a}]`].join('');
   f.push(`${mixIn}amix=inputs=${whooshLabels.length + 2}:duration=first[aoutfinal]`);
 
-  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${v}]`, '-map', '[aoutfinal]', '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
+  // If there was only one clip, video never went through -filter_complex, so it
+  // must be mapped as a raw input stream (no brackets) rather than a filter label.
+  const videoMap = v === '0:v' ? '0:v' : `[${v}]`;
+
+  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', videoMap, '-map', '[aoutfinal]', '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
 }
 
 async function mixInMusic(videoPath, musicPath, outPath) {
