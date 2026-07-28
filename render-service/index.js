@@ -51,12 +51,10 @@ app.use(express.json({ limit: '30mb' }));
 // Quick way to confirm the service is alive by just visiting the URL in a browser
 app.get('/', (req, res) => res.send('Vidmasta render service is running.'));
 
-// Quick way to confirm the service is alive by just visiting the URL in a browser
-app.get('/', (req, res) => res.send('Vidmasta render service is running.'));
-
 app.post('/generate', async (req, res) => {
   const { title, images, sprites } = req.body;
   if (!images?.length) return res.status(400).send('At least one image is required');
+  console.log('generate started, images:', images.length);
 
   const dir = path.join(os.tmpdir(), `job_${crypto.randomBytes(4).toString('hex')}`);
   await fs.mkdir(dir, { recursive: true });
@@ -68,8 +66,10 @@ app.post('/generate', async (req, res) => {
       const imgPath = path.join(dir, `post_${i}.png`);
       await fs.writeFile(imgPath, Buffer.from(images[i].base64, 'base64'));
       const text = await extractText(imgPath);
+      console.log(`image ${i}: OCR done`);
       const emotion = tagEmotion(text);
       const { audioPath, words } = await synthesizeSpeech(text, dir, i);
+      console.log(`image ${i}: TTS done`);
       segments.push({ imgPath, text, emotion, audioPath, words });
     }
 
@@ -80,12 +80,14 @@ app.post('/generate', async (req, res) => {
       await fs.writeFile(p, Buffer.from(base64, 'base64'));
       spritePaths[emotion] = p;
     }
+    console.log('sprites saved:', Object.keys(spritePaths).length);
 
     // 3. Pick background clip + music from the bundled asset folders
     const bgVideo = await randomFile(path.join(ASSETS, 'videos'));
     const music = await randomFile(path.join(ASSETS, 'music'));
     const hookSfx = path.join(ASSETS, 'sfx', 'hook.mp3');
     const transitionSfx = path.join(ASSETS, 'sfx', 'transition.mp3');
+    console.log('background assets picked');
 
     // 4. Render each post as its own clip
     const durations = await Promise.all(segments.map((s) => ffprobeDuration(s.audioPath)));
@@ -103,6 +105,7 @@ app.post('/generate', async (req, res) => {
 
       const clipPath = path.join(dir, `clip_${i}.mp4`);
       await renderClip({ bgVideo, bgStart: bgCursor, duration, imgPath: seg.imgPath, spritePath, audioPath: seg.audioPath, emotionSfx, words: seg.words, outPath: clipPath });
+      console.log(`clip ${i} rendered`);
       clipPaths.push(clipPath);
       bgCursor += duration;
     }
@@ -110,17 +113,19 @@ app.post('/generate', async (req, res) => {
     // 5. Stitch with transitions + SFX, then produce with/without-music versions
     const dialogueVideo = path.join(dir, 'dialogue.mp4');
     await concatWithTransitions(clipPaths, durations, transitionSfx, hookSfx, dialogueVideo);
+    console.log('clips concatenated');
 
     const finalNoMusic = path.join(dir, 'no_music.mp4');
     await fs.copyFile(dialogueVideo, finalNoMusic);
     const finalWithMusic = path.join(dir, 'with_music.mp4');
     await mixInMusic(dialogueVideo, music, finalWithMusic);
+    console.log('music mixed, sending response');
 
     const videoBase64 = (await fs.readFile(finalWithMusic)).toString('base64');
     const videoNoMusicBase64 = (await fs.readFile(finalNoMusic)).toString('base64');
     res.json({ videoBase64, videoNoMusicBase64 });
   } catch (err) {
-    console.error(err);
+    console.error('generate failed:', err);
     res.status(500).send(err.message);
   } finally {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
