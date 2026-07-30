@@ -27,7 +27,14 @@ const credentials = process.env.GOOGLE_CREDENTIALS_JSON
 const visionClient = new vision.ImageAnnotatorClient(credentials ? { credentials } : undefined);
 const ttsClient = new textToSpeech.TextToSpeechClient(credentials ? { credentials } : undefined);
 
-const WIDTH = 1080, HEIGHT = 1920, XFADE = 0.4;
+// Deliberately low resolution - trades quality for much faster renders and smaller files
+const WIDTH = 360, HEIGHT = 640, XFADE = 0.4, FPS = 20;
+const POST_WIDTH = Math.round(WIDTH * 0.852);
+const POST_X = Math.round(WIDTH * 0.074), POST_Y = Math.round(HEIGHT * 0.104);
+const SPRITE_WIDTH = Math.round(WIDTH * 0.241);
+const SPRITE_X_FROM_RIGHT = Math.round(WIDTH * 0.259), SPRITE_Y_FROM_BOTTOM = Math.round(HEIGHT * 0.219);
+const FONT_SIZE = Math.round(WIDTH * 0.0593), FONT_SIZE_ACTIVE = Math.round(WIDTH * 0.063);
+const CAPTION_Y_FROM_BOTTOM = Math.round(HEIGHT * 0.1667);
 const CAPTION_GREEN = '0x39FF14';
 const ASSETS = path.join(__dirname, 'assets'); // videos/, music/, sfx/ — bundled in the Docker image
 
@@ -192,19 +199,19 @@ async function renderClip({ bgVideo, bgStart, duration, imgPath, spritePath, aud
 
   const f = [];
   f.push(`[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}[bg]`);
-  f.push(`[1:v]scale=${WIDTH - 160}:-1[postimg]`);
+  f.push(`[1:v]scale=${POST_WIDTH}:-1[postimg]`);
   f.push(`[postimg]drawbox=x=0:y='ih*min(1\\,t/${duration})':w=iw:h='ih*(1-min(1\\,t/${duration}))':color=black@1.0:t=fill[reveal]`);
-  f.push(`[bg][reveal]overlay=80:200[withpost]`);
+  f.push(`[bg][reveal]overlay=${POST_X}:${POST_Y}[withpost]`);
   let last = 'withpost';
   if (spritePath) {
-    f.push(`[3:v]scale=260:-1,fade=t=in:d=0.25:alpha=1[sprite]`);
-    f.push(`[${last}][sprite]overlay=W-280:H-420[withsprite]`);
+    f.push(`[3:v]scale=${SPRITE_WIDTH}:-1,fade=t=in:d=0.25:alpha=1[sprite]`);
+    f.push(`[${last}][sprite]overlay=W-${SPRITE_X_FROM_RIGHT}:H-${SPRITE_Y_FROM_BOTTOM}[withsprite]`);
     last = 'withsprite';
   }
   words.forEach((w, i) => {
     const safe = w.word.replace(/[:'\\]/g, '');
-    f.push(`[${last}]drawtext=text='${safe}':fontcolor=white:fontsize=64:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:x=(w-text_w)/2:y=h-320:enable='not(between(t,${w.start},${w.end}))'[c${i}a]`);
-    f.push(`[c${i}a]drawtext=text='${safe}':fontcolor=${CAPTION_GREEN}:fontsize=68:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:x=(w-text_w)/2:y=h-320:enable='between(t,${w.start},${w.end})'[c${i}]`);
+    f.push(`[${last}]drawtext=text='${safe}':fontcolor=white:fontsize=${FONT_SIZE}:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:x=(w-text_w)/2:y=h-${CAPTION_Y_FROM_BOTTOM}:enable='not(between(t,${w.start},${w.end}))'[c${i}a]`);
+    f.push(`[c${i}a]drawtext=text='${safe}':fontcolor=${CAPTION_GREEN}:fontsize=${FONT_SIZE_ACTIVE}:fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:x=(w-text_w)/2:y=h-${CAPTION_Y_FROM_BOTTOM}:enable='between(t,${w.start},${w.end})'[c${i}]`);
     last = `c${i}`;
   });
   if (emotionSfx) {
@@ -215,7 +222,7 @@ async function renderClip({ bgVideo, bgStart, duration, imgPath, spritePath, aud
     f.push(`[2:a]anull[aout]`);
   }
 
-  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${last}]`, '-map', '[aout]', '-t', String(duration), '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
+  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', `[${last}]`, '-map', '[aout]', '-t', String(duration), '-r', String(FPS), '-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2', '-c:a', 'aac', '-y', outPath]);
 }
 
 async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSfx, outPath) {
@@ -251,7 +258,8 @@ async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSf
   // Single clip = video was never touched by a filter, so just copy it instead of re-encoding
   const videoCodecArgs = v === '0:v' ? ['-c:v', 'copy'] : ['-c:v', 'libx264', '-preset', 'ultrafast', '-threads', '2'];
 
-  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', videoMap, '-map', '[aoutfinal]', ...videoCodecArgs, '-c:a', 'aac', '-y', outPath]);
+  const frameRateArgs = v === '0:v' ? [] : ['-r', String(FPS)];
+  await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', videoMap, '-map', '[aoutfinal]', ...videoCodecArgs, ...frameRateArgs, '-c:a', 'aac', '-y', outPath]);
 }
 
 async function mixInMusic(videoPath, musicPath, outPath) {
