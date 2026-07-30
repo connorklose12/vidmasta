@@ -8,6 +8,7 @@ const express = require('express');
 const cors = require('cors');
 const vision = require('@google-cloud/vision');
 const textToSpeech = require('@google-cloud/text-to-speech');
+const { Storage } = require('@google-cloud/storage');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs/promises');
@@ -26,6 +27,13 @@ const credentials = process.env.GOOGLE_CREDENTIALS_JSON
 
 const visionClient = new vision.ImageAnnotatorClient(credentials ? { credentials } : undefined);
 const ttsClient = new textToSpeech.TextToSpeechClient(credentials ? { credentials } : undefined);
+
+// The finished video/music no longer travel through the HTTP response body —
+// they're uploaded here and a small URL is returned instead, which is what
+// keeps us under Cloud Run's ~32MB response-size ceiling regardless of length.
+const storage = new Storage(credentials ? { credentials } : undefined);
+const BUCKET_NAME = process.env.STORAGE_BUCKET || 'vidmasta-7e113.firebasestorage.app';
+const bucket = storage.bucket(BUCKET_NAME);
 
 const WIDTH = 360, HEIGHT = 640, XFADE = 0.4;
 const CAPTION_GREEN = '0x39FF14';
@@ -115,15 +123,26 @@ app.post('/generate', async (req, res) => {
     await concatWithTransitions(clipPaths, durations, transitionSfx, hookSfx, dialogueVideo);
     console.log('clips concatenated');
 
-    const finalNoMusic = path.join(dir, 'no_music.mp4');
-    await fs.copyFile(dialogueVideo, finalNoMusic);
-    const finalWithMusic = path.join(dir, 'with_music.mp4');
-    await mixInMusic(dialogueVideo, music, finalWithMusic);
-    console.log('music mixed, sending response');
+    const musicClipPath = path.join(dir, 'music.mp3');
+    await extractMusicClip(dialogueVideo, music, musicClipPath);
+    console.log('music clip extracted, uploading to storage');
 
-    const videoBase64 = (await fs.readFile(finalWithMusic)).toString('base64');
-    const videoNoMusicBase64 = (await fs.readFile(finalNoMusic)).toString('base64');
-    res.json({ videoBase64, videoNoMusicBase64 });
+    // 6. Upload to Cloud Storage instead of inlining base64 into the response —
+    // this is what actually keeps us under Cloud Run's response-size ceiling.
+    const jobId = path.basename(dir);
+    const videoDest = `renders/${jobId}/video.mp4`;
+    const musicDest = `renders/${jobId}/music.mp3`;
+
+    await bucket.upload(dialogueVideo, { destination: videoDest, metadata: { contentType: 'video/mp4' } });
+    await bucket.upload(musicClipPath, { destination: musicDest, metadata: { contentType: 'audio/mpeg' } });
+    await bucket.file(videoDest).makePublic();
+    await bucket.file(musicDest).makePublic();
+
+    const videoUrl = bucket.file(videoDest).publicUrl();
+    const musicUrl = bucket.file(musicDest).publicUrl();
+    console.log('uploaded, sending response');
+
+    res.json({ videoUrl, musicUrl });
   } catch (err) {
     console.error('generate failed:', err);
     res.status(500).send(err.message);
@@ -254,12 +273,13 @@ async function concatWithTransitions(clipPaths, durations, transitionSfx, hookSf
   await run('ffmpeg', [...inputs, '-filter_complex', f.join(';'), '-map', videoMap, '-map', '[aoutfinal]', ...videoCodecArgs, '-c:a', 'aac', '-y', outPath]);
 }
 
-async function mixInMusic(videoPath, musicPath, outPath) {
+// Trims the background-music track down to the finished video's duration,
+// starting at a random offset — kept separate from the dialogue video so the
+// frontend can mix/mute it independently instead of us rendering two full videos.
+async function extractMusicClip(videoPath, musicPath, outPath) {
   const duration = await ffprobeDuration(videoPath);
   const start = await randomStart(musicPath, duration);
-  await run('ffmpeg', ['-i', videoPath, '-ss', String(start), '-t', String(duration), '-i', musicPath,
-    '-filter_complex', `[1:a]volume=0.18[m];[0:a][m]amix=inputs=2:duration=first[aout]`,
-    '-map', '0:v', '-map', '[aout]', '-c:v', 'copy', '-c:a', 'aac', '-y', outPath]);
+  await run('ffmpeg', ['-ss', String(start), '-t', String(duration), '-i', musicPath, '-c:a', 'copy', '-y', outPath]);
 }
 
 const port = process.env.PORT || 8080;
