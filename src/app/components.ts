@@ -60,11 +60,12 @@ export class LoginComponent {
 
       <p class="error" *ngIf="error">{{ error }}</p>
 
-      <div *ngIf="videoBase64" class="result">
-        <video [src]="musicOn ? videoSrc : videoNoMusicSrc" controls width="280"></video>
+      <div *ngIf="videoUrl" class="result">
+        <video #videoEl [src]="videoUrl" controls width="280" autoplay></video>
+        <audio #musicEl [src]="musicUrl" loop [autoplay]="musicOn" [muted]="!musicOn"></audio>
         <br />
-        <button (click)="musicOn = !musicOn">{{ musicOn ? 'Turn Music Off' : 'Turn Music On' }}</button>
-        <a [href]="musicOn ? videoSrc : videoNoMusicSrc" download="video.mp4">Download</a>
+        <button (click)="toggleMusic(musicEl)">{{ musicOn ? 'Turn Music Off' : 'Turn Music On' }}</button>
+        <a [href]="videoUrl" download="video.mp4">Download Video</a>
       </div>
     </div>
   `,
@@ -74,9 +75,8 @@ export class UploadComponent {
   title = ''; postFiles: File[] = []; sprites: Partial<Record<Emotion, File>> = {};
   submitting = false; error = '';
 
-  videoBase64: string | null = null;
-  videoNoMusicBase64: string | null = null;
-  videoSrc = ''; videoNoMusicSrc = '';
+  videoUrl: string | null = null;
+  musicUrl: string | null = null;
   musicOn = true;
 
   constructor(private videos: VideoService) {}
@@ -86,16 +86,20 @@ export class UploadComponent {
     return input.files ? Array.from(input.files) : [];
   }
 
+  toggleMusic(musicEl: HTMLAudioElement) {
+    this.musicOn = !this.musicOn;
+    musicEl.muted = !this.musicOn;
+    if (this.musicOn) musicEl.play();
+  }
+
   async submit() {
     this.error = '';
     if (!this.postFiles.length) { this.error = 'Add at least one screenshot.'; return; }
     this.submitting = true;
     try {
       const result = await this.videos.generateVideo(this.postFiles, this.title || 'Untitled', this.sprites);
-      this.videoBase64 = result.videoBase64;
-      this.videoNoMusicBase64 = result.videoNoMusicBase64;
-      this.videoSrc = `data:video/mp4;base64,${this.videoBase64}`;
-      this.videoNoMusicSrc = `data:video/mp4;base64,${this.videoNoMusicBase64}`;
+      this.videoUrl = result.videoUrl;
+      this.musicUrl = result.musicUrl;
     } catch (e: any) { this.error = e.message; }
     finally { this.submitting = false; }
   }

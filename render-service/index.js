@@ -2,13 +2,13 @@
 // One HTTP endpoint that does everything: OCR the screenshots, generate speech,
 // composite the final video with FFmpeg, and hand the finished video straight
 // back in the response. Nothing is written to Cloud Storage or a database —
-// sprites and post images only ever exist for the life of this one request.
+// sprites, post images, and the rendered video/music only ever exist for the
+// life of this one request, streamed straight back in the HTTP response.
 
 const express = require('express');
 const cors = require('cors');
 const vision = require('@google-cloud/vision');
 const textToSpeech = require('@google-cloud/text-to-speech');
-const { Storage } = require('@google-cloud/storage');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs/promises');
@@ -27,13 +27,6 @@ const credentials = process.env.GOOGLE_CREDENTIALS_JSON
 
 const visionClient = new vision.ImageAnnotatorClient(credentials ? { credentials } : undefined);
 const ttsClient = new textToSpeech.TextToSpeechClient(credentials ? { credentials } : undefined);
-
-// The finished video/music no longer travel through the HTTP response body —
-// they're uploaded here and a small URL is returned instead, which is what
-// keeps us under Cloud Run's ~32MB response-size ceiling regardless of length.
-const storage = new Storage(credentials ? { credentials } : undefined);
-const BUCKET_NAME = process.env.STORAGE_BUCKET || 'vidmasta-7e113.firebasestorage.app';
-const bucket = storage.bucket(BUCKET_NAME);
 
 const WIDTH = 360, HEIGHT = 640, XFADE = 0.4;
 const CAPTION_GREEN = '0x39FF14';
@@ -125,24 +118,25 @@ app.post('/generate', async (req, res) => {
 
     const musicClipPath = path.join(dir, 'music.mp3');
     await extractMusicClip(dialogueVideo, music, musicClipPath);
-    console.log('music clip extracted, uploading to storage');
+    console.log('music clip extracted, streaming response');
 
-    // 6. Upload to Cloud Storage instead of inlining base64 into the response —
-    // this is what actually keeps us under Cloud Run's response-size ceiling.
-    const jobId = path.basename(dir);
-    const videoDest = `renders/${jobId}/video.mp4`;
-    const musicDest = `renders/${jobId}/music.mp3`;
+    // 6. Stream both files back in one multipart response instead of uploading
+    // anywhere. Cloud Run's ~32MB response ceiling only applies to buffered
+    // (non-streaming) responses — writing chunks directly like this, with no
+    // Content-Length on the overall response, avoids that ceiling entirely,
+    // with nothing ever touching storage of any kind.
+    const videoBuffer = await fs.readFile(dialogueVideo);
+    const musicBuffer = await fs.readFile(musicClipPath);
+    const boundary = `vidmasta-${crypto.randomBytes(8).toString('hex')}`;
 
-    await bucket.upload(dialogueVideo, { destination: videoDest, metadata: { contentType: 'video/mp4' } });
-    await bucket.upload(musicClipPath, { destination: musicDest, metadata: { contentType: 'audio/mpeg' } });
-    await bucket.file(videoDest).makePublic();
-    await bucket.file(musicDest).makePublic();
-
-    const videoUrl = bucket.file(videoDest).publicUrl();
-    const musicUrl = bucket.file(musicDest).publicUrl();
-    console.log('uploaded, sending response');
-
-    res.json({ videoUrl, musicUrl });
+    res.writeHead(200, { 'Content-Type': `multipart/mixed; boundary=${boundary}` });
+    res.write(`--${boundary}\r\nContent-Type: video/mp4\r\nContent-Length: ${videoBuffer.length}\r\n\r\n`);
+    res.write(videoBuffer);
+    res.write(`\r\n--${boundary}\r\nContent-Type: audio/mpeg\r\nContent-Length: ${musicBuffer.length}\r\n\r\n`);
+    res.write(musicBuffer);
+    res.write(`\r\n--${boundary}--`);
+    res.end();
+    console.log('response sent');
   } catch (err) {
     console.error('generate failed:', err);
     res.status(500).send(err.message);
