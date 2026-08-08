@@ -1,0 +1,8 @@
+{
+  "hosting": {
+    "public": "dist/vidmast2",
+    "site": "vidmasta-7e113-app",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  }
+}
