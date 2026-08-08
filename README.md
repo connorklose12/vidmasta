@@ -4,3 +4,4 @@ On this website, you submit a social media post/s, and in the press of a button,
 This is a video editing website that allows that edits a social media post into text 2 speech with a 
 bunch of auto applied effects and transitions so it's easily ready to import.
 >>>>>>> 9f3db82c387fe823ac0161234c73cfc552a0b586
+Some files were unable to easily be pushed onto GitHub branch or were very large, so if you wanna see them ask me.
